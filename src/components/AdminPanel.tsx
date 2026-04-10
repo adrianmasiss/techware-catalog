@@ -27,6 +27,7 @@ function ProductForm({
   const [priceNote, setPriceNote] = useState(product?.priceNote || "");
   const [specs, setSpecs] = useState<Spec[]>(product?.specs || []);
   const [imgOk, setImgOk] = useState<boolean[]>([]);
+  const [uploading, setUploading] = useState<number | null>(null);
 
   useEffect(() => {
     const checks = images.map((img) => {
@@ -146,11 +147,11 @@ function ProductForm({
           </div>
 
           <div className="pt-2">
-            <h4 className="text-[0.7rem] font-bold tracking-[0.2em] uppercase text-white/60 mb-4">Múltiples Imágenes (URLs Transparente PNG/WEBP)</h4>
+            <h4 className="text-[0.7rem] font-bold tracking-[0.2em] uppercase text-white/60 mb-4">Múltiples Imágenes</h4>
             <div className="space-y-3 mb-4">
               {images.map((img, i) => (
                 <div key={i} className="group">
-                  <div className="flex gap-3 items-center">
+                  <div className="flex gap-2 items-center">
                     <input
                       className={`${inputClass} !py-2.5`}
                       value={img}
@@ -159,8 +160,45 @@ function ProductForm({
                         n[i] = e.target.value;
                         setImages(n);
                       }}
-                      placeholder="https://..."
+                      placeholder="https://... o sube un archivo"
                     />
+                    <label className="w-10 h-10 rounded-xl border border-accent/30 bg-accent/10 text-accent flex items-center justify-center shrink-0 hover:bg-accent/20 transition-all duration-300 cursor-pointer" title="Subir imagen">
+                      {uploading === i ? (
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                        </svg>
+                      ) : (
+                        <svg fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                        </svg>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={uploading !== null}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setUploading(i);
+                          try {
+                            const form = new FormData();
+                            form.append("file", file);
+                            const res = await fetch("/api/upload", { method: "POST", body: form });
+                            const data = await res.json();
+                            if (data.url) {
+                              const n = [...images];
+                              n[i] = data.url;
+                              setImages(n);
+                            }
+                          } finally {
+                            setUploading(null);
+                            e.target.value = "";
+                          }
+                        }}
+                      />
+                    </label>
                     <button
                       onClick={() => setImages(images.filter((_, j) => j !== i))}
                       className="w-10 h-10 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 text-lg flex items-center justify-center shrink-0 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all duration-300 opacity-50 group-hover:opacity-100"
@@ -169,7 +207,7 @@ function ProductForm({
                     </button>
                   </div>
                   {img && (
-                    <div className="mt-2 flex items-center gap-4 bg-white/5 p-2 rounded-lg border border-white/5 w-[calc(100%-3rem)]">
+                    <div className="mt-2 flex items-center gap-4 bg-white/5 p-2 rounded-lg border border-white/5 w-[calc(100%-5.5rem)]">
                       {imgOk[i] ? (
                         <img src={img} alt="" className="w-10 h-10 object-contain rounded-md drop-shadow-md" />
                       ) : (
