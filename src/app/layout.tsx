@@ -4,6 +4,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "TechWare — Catálogo Exclusivo",
   description: "Catálogo de productos tecnológicos premium",
+  icons: {
+    icon: "/logo1.png",
+  },
 };
 
 export default function RootLayout({
