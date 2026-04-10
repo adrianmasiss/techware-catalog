@@ -18,7 +18,7 @@ export default function Catalog() {
     const params = new URLSearchParams(window.location.search);
     const cat = params.get("category");
 
-    fetch("/api/products")
+    fetch("/api/catalog")
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((data: Product[]) => {
         const filtered = cat

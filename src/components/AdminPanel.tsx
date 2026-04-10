@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence, Reorder } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Product, Spec } from "@/lib/types";
-import { loadProducts, saveProducts } from "@/lib/store";
+import { loadProducts } from "@/lib/store";
 import Link from "next/link";
 
 function ProductForm({
@@ -303,14 +303,21 @@ export default function AdminPanel() {
   const [originUrl, setOriginUrl] = useState("");
 
   useEffect(() => {
-    setProducts(loadProducts());
+    fetch("/api/catalog")
+      .then((r) => r.json())
+      .then((data: Product[]) => setProducts(data))
+      .catch(() => setProducts(loadProducts()));
     setMounted(true);
     setOriginUrl(typeof window !== "undefined" ? window.location.origin : "");
   }, []);
 
   const save = (updated: Product[]) => {
     setProducts(updated);
-    saveProducts(updated);
+    fetch("/api/catalog", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updated),
+    });
   };
 
   const handleSave = (p: Product) => {
