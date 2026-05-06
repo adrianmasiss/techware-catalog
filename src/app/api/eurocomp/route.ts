@@ -9,7 +9,13 @@ export async function GET(request: NextRequest) {
   const q    = (searchParams.get("q") ?? "").toLowerCase().trim();
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
 
-  const all = await kv.get<Product[]>("eurocomp_cache");
+  let all: Product[] | null = null;
+  try {
+    all = await kv.get<Product[]>("eurocomp_cache");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return Response.json({ error: message }, { status: 500 });
+  }
 
   if (!Array.isArray(all)) {
     return Response.json({ products: [], total: 0, pages: 0, cached: false });
