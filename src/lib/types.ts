@@ -9,9 +9,10 @@ export interface Product {
   name: string;
   model: string;
   desc: string;
-  image?: string; 
+  image?: string;
   images?: string[];
   price: string;
+  priceUsd?: number;
   priceNote: string;
   specs?: Spec[];
 }

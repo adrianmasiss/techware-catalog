@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Product, Spec } from "@/lib/types";
 import { loadProducts } from "@/lib/store";
 import Link from "next/link";
+import EurocompManager from "@/components/EurocompManager";
 
 function ProductForm({
   product,
@@ -520,6 +521,7 @@ export default function AdminPanel() {
   const [mounted, setMounted] = useState(false);
   const [originUrl, setOriginUrl] = useState("");
   const [importing, setImporting] = useState(false);
+  const [tab, setTab] = useState<"eurocomp" | "manual">("eurocomp");
 
   useEffect(() => {
     fetch("/api/catalog")
@@ -586,30 +588,40 @@ export default function AdminPanel() {
               href="/"
               className="glass-button text-xs font-bold tracking-[0.15em] uppercase px-6 py-3.5 rounded-xl border border-white/10 text-white flex items-center gap-2 hover:bg-white/5"
             >
-               <svg fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+              <svg fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
               Vista Previa
             </Link>
-            <button
-              onClick={() => setImporting(true)}
-              className="text-xs font-bold tracking-[0.15em] uppercase px-6 py-3.5 rounded-xl border border-accent/40 text-accent hover:bg-accent/10 transition-all duration-300 flex items-center gap-2"
-            >
-              <svg fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-              </svg>
-              Importar Eurocomp
-            </button>
-            <button
-              onClick={() => setEditing("new")}
-              className="text-xs font-bold tracking-[0.15em] uppercase px-8 py-3.5 rounded-xl bg-gradient-to-r from-accent to-accent-alt text-white shadow-lg shadow-accent/20 hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] transition-all duration-300"
-            >
-              + Nuevo Producto
-            </button>
+            {tab === "manual" && (
+              <button
+                onClick={() => setEditing("new")}
+                className="text-xs font-bold tracking-[0.15em] uppercase px-8 py-3.5 rounded-xl bg-gradient-to-r from-accent to-accent-alt text-white shadow-lg shadow-accent/20 hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] transition-all duration-300"
+              >
+                + Nuevo Producto
+              </button>
+            )}
           </div>
         </header>
 
+        {/* Tabs */}
+        <div className="flex gap-1 mb-8 bg-white/[0.03] p-1 rounded-2xl border border-white/5 w-fit">
+          {([["eurocomp", "Catálogo Eurocomp"], ["manual", "Productos Manuales"]] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`text-xs font-bold tracking-[0.15em] uppercase px-6 py-2.5 rounded-xl transition-all duration-300 ${tab === key ? "bg-gradient-to-r from-accent to-accent-alt text-white shadow-lg shadow-accent/20" : "text-white/40 hover:text-white"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "eurocomp" && <EurocompManager />}
+
+        {tab === "manual" && (
+        <>
         {/* Magical Links Section */}
         {products.length > 0 && originUrl && (
           <div className="mb-10">
@@ -747,6 +759,8 @@ export default function AdminPanel() {
             </div>
           )}
         </div>
+        </>
+        )}
       </div>
 
       {/* Form Modal */}

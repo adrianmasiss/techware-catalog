@@ -142,10 +142,8 @@ function mapItem(raw: SoapItem): Product {
     .map(resolveImage)
     .filter(Boolean) as string[];
 
-  const currency = raw.currency_code ?? "USD";
-  const price = raw.precio ? `${raw.precio} ${currency}` : "";
+  const priceUsd = raw.precio ? parseFloat(raw.precio) : undefined;
   const stock = raw.stock ? `Stock: ${raw.stock}` : "";
-
   const desc = raw.desc_corta || raw.descripcion || "";
 
   return {
@@ -154,7 +152,8 @@ function mapItem(raw: SoapItem): Product {
     name:      raw.descripcion ?? "",
     desc,
     category:  raw.familia ?? raw.FamiliaPadre ?? "General",
-    price,
+    price:     raw.precio ?? "",
+    priceUsd,
     priceNote: stock,
     images,
     image:     images[0],
