@@ -1,91 +1,54 @@
-import type { Product } from "./types";
-
-// ── Error type ───────────────────────────────────────────────────────────────
+import type { Product, Spec } from "./types";
 
 export class SoapApiError extends Error {
-  constructor(
-    public readonly code: number,
-    message: string
-  ) {
+  constructor(public readonly code: number, message: string) {
     super(message);
     this.name = "SoapApiError";
   }
 }
 
-// ── Types for raw SOAP response ──────────────────────────────────────────────
-
 interface SoapItem {
   codigo?: string;
   descripcion?: string;
+  desc_corta?: string;
   precio?: string;
+  currency_code?: string;
   stock?: string;
-  imagen_url?: string;
+  image_url?: string;
+  image_url_1?: string;
+  image_url_2?: string;
+  image_url_3?: string;
+  image_url_4?: string;
+  image_url_5?: string;
   marca?: string;
+  modelo?: string;
   familia?: string;
+  FamiliaPadre?: string;
+  caracteristicas?: string;
+  presentacion?: string;
 }
 
-// ── Raw SOAP request ─────────────────────────────────────────────────────────
-
 const ENDPOINT = "https://eurocompcr.com/webservice.php";
-const NS = "urn:server";
-const ENC = "http://schemas.xmlsoap.org/soap/encoding/";
-
-// RPC/encoded SOAP — parameters need xsi:type as per WSDL
-const XSD_TYPES: Record<string, string> = {
-  ws_pid:    "xsd:int",
-  ws_cid:    "xsd:int",
-  ws_passwd: "xsd:string",
-  bid:       "xsd:int",
-  icodigo:   "xsd:string",
-};
+const IMAGE_BASE = "https://eurocompcr.com/";
+const DEFAULT_BID = process.env.SOAP_BID ?? "1";
 
 function buildEnvelope(method: string, params: Record<string, string>): string {
   const body = Object.entries(params)
-    .map(([k, v]) => {
-      const type = XSD_TYPES[k] ?? "xsd:string";
-      return `<${k} xsi:type="${type}">${v}</${k}>`;
-    })
+    .map(([k, v]) => `<${k}>${v}</${k}>`)
     .join("");
-  return `<?xml version="1.0" encoding="utf-8"?>
-<SOAP-ENV:Envelope
-  xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/"
-  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:SOAP-ENC="${ENC}"
-  xmlns:tns="${NS}"
-  SOAP-ENV:encodingStyle="${ENC}">
-  <SOAP-ENV:Body>
-    <tns:${method}>${body}</tns:${method}>
-  </SOAP-ENV:Body>
-</SOAP-ENV:Envelope>`;
-}
-
-export async function probeSoap(method: string, params: Record<string, string>): Promise<number> {
-  try {
-    const text = await callSoap(method, params);
-    const m = text.match(/<result[^>]*>(\d+)<\/result>/);
-    return m ? parseInt(m[1], 10) : -1;
-  } catch {
-    return -99;
-  }
-}
-
-export async function rawSoap(method: string, params: Record<string, string>): Promise<string> {
-  try {
-    return await callSoap(method, params);
-  } catch (e) {
-    return String(e);
-  }
+  return `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:web="http://eurocompcr.com/webservice">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <web:${method}>${body}</web:${method}>
+  </soapenv:Body>
+</soapenv:Envelope>`;
 }
 
 async function callSoap(method: string, params: Record<string, string>): Promise<string> {
   const envelope = buildEnvelope(method, params);
   const res = await fetch(ENDPOINT, {
     method: "POST",
-    headers: {
-      "Content-Type": "text/xml;charset=UTF-8",
-      SOAPAction: `"${NS}#${method}"`,
-    },
+    headers: { "Content-Type": "text/xml;charset=UTF-8", SOAPAction: '""' },
     body: envelope,
   });
   const text = await res.text();
@@ -108,26 +71,57 @@ function allTagValues(xml: string, tag: string): string[] {
   return results;
 }
 
+function resolveImage(path: string): string {
+  if (!path) return "";
+  if (path.startsWith("http")) return path;
+  return IMAGE_BASE + path;
+}
+
+function parseCaracteristicas(text: string): Spec[] {
+  if (!text) return [];
+  return text
+    .split("\n")
+    .map((line) => line.replace(/^[-\s]+/, "").trim())
+    .filter(Boolean)
+    .map((line) => {
+      const idx = line.indexOf(":");
+      if (idx > 0) {
+        return { l: line.slice(0, idx).trim(), v: line.slice(idx + 1).trim() };
+      }
+      return { l: line, v: "" };
+    });
+}
+
 function parseXmlResponse(xml: string): Product[] {
   const resultStr = tagValue(xml, "result");
   const code = parseInt(resultStr, 10);
   if (code !== 0) {
-    throw new SoapApiError(code, `SiReTT WebService error (code ${code})`);
+    throw new SoapApiError(code, `WebService error (code ${code})`);
   }
 
-  // Extract each <item> block
   const itemBlocks = allTagValues(xml, "item");
   if (itemBlocks.length === 0) return [];
 
   return itemBlocks.map((block) => {
     const raw: SoapItem = {
-      codigo:      tagValue(block, "codigo"),
-      descripcion: tagValue(block, "descripcion"),
-      precio:      tagValue(block, "precio"),
-      stock:       tagValue(block, "stock"),
-      imagen_url:  tagValue(block, "imagen_url"),
-      marca:       tagValue(block, "marca"),
-      familia:     tagValue(block, "familia"),
+      codigo:         tagValue(block, "codigo"),
+      descripcion:    tagValue(block, "descripcion"),
+      desc_corta:     tagValue(block, "desc_corta"),
+      precio:         tagValue(block, "precio"),
+      currency_code:  tagValue(block, "currency_code"),
+      stock:          tagValue(block, "stock"),
+      image_url:      tagValue(block, "image_url"),
+      image_url_1:    tagValue(block, "image_url_1"),
+      image_url_2:    tagValue(block, "image_url_2"),
+      image_url_3:    tagValue(block, "image_url_3"),
+      image_url_4:    tagValue(block, "image_url_4"),
+      image_url_5:    tagValue(block, "image_url_5"),
+      marca:          tagValue(block, "marca"),
+      modelo:         tagValue(block, "modelo"),
+      familia:        tagValue(block, "familia"),
+      FamiliaPadre:   tagValue(block, "FamiliaPadre"),
+      caracteristicas: tagValue(block, "caracteristicas"),
+      presentacion:   tagValue(block, "presentacion"),
     };
     return mapItem(raw);
   });
@@ -136,46 +130,44 @@ function parseXmlResponse(xml: string): Product[] {
 // ── Field mapping ────────────────────────────────────────────────────────────
 
 function mapItem(raw: SoapItem): Product {
-  const codigo      = raw.codigo      ?? "";
-  const descripcion = raw.descripcion ?? "";
-  const marca       = raw.marca       ? `[${raw.marca}] ` : "";
-  const stock       = raw.stock       ? `Stock: ${raw.stock}` : "";
+  const images = [
+    raw.image_url,
+    raw.image_url_1,
+    raw.image_url_2,
+    raw.image_url_3,
+    raw.image_url_4,
+    raw.image_url_5,
+  ]
+    .filter((v): v is string => Boolean(v))
+    .map(resolveImage)
+    .filter(Boolean) as string[];
+
+  const currency = raw.currency_code ?? "USD";
+  const price = raw.precio ? `${raw.precio} ${currency}` : "";
+  const stock = raw.stock ? `Stock: ${raw.stock}` : "";
+
+  const desc = raw.desc_corta || raw.descripcion || "";
 
   return {
-    id:       codigo || crypto.randomUUID(),
-    model:    codigo,
-    name:     descripcion,
-    desc:     marca + descripcion,
-    category: raw.familia  ?? "General",
-    price:    raw.precio   ?? "",
+    id:        raw.codigo || crypto.randomUUID(),
+    model:     raw.modelo || raw.codigo || "",
+    name:      raw.descripcion ?? "",
+    desc,
+    category:  raw.familia ?? raw.FamiliaPadre ?? "General",
+    price,
     priceNote: stock,
-    images:   raw.imagen_url ? [raw.imagen_url] : [],
+    images,
+    image:     images[0],
+    specs:     parseCaracteristicas(raw.caracteristicas ?? ""),
   };
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
-export async function fetchAllBodegaItems(bid: string): Promise<Product[]> {
-  const ws_cid    = process.env.SOAP_CID!;
-  const ws_passwd = process.env.SOAP_PASSWD!;
-  const xml = await callSoap("wsc_request_bodega_all_items", { ws_cid, ws_passwd, bid });
-  return parseXmlResponse(xml);
-}
-
 export async function fetchItems(): Promise<Product[]> {
   const ws_cid    = process.env.SOAP_CID!;
   const ws_passwd = process.env.SOAP_PASSWD!;
-  const xml = await callSoap("wsc_request_items", { ws_cid, ws_passwd });
-  return parseXmlResponse(xml);
-}
-
-// Provider mode: wsp_ functions use pid/passwd (no ws_ prefix)
-export async function fetchProviderItems(_bid: string): Promise<Product[]> {
-  const pid    = process.env.SOAP_CID!;
-  const passwd = process.env.SOAP_PASSWD!;
-  const ws_pid = pid;
-  const ws_passwd = passwd;
-  console.log("[SOAP] trying wsp_request_items with ws_pid:", ws_pid);
-  const xml = await callSoap("wsp_request_items", { ws_pid, ws_passwd });
+  const bid       = DEFAULT_BID;
+  const xml = await callSoap("wsc_request_bodega_all_items", { ws_cid, ws_passwd, bid });
   return parseXmlResponse(xml);
 }

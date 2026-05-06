@@ -333,12 +333,193 @@ function LinkCard({ title, url, origin }: { title: string, url: string, origin: 
   );
 }
 
+function EurocompImporter({
+  existingIds,
+  onImport,
+  onClose,
+}: {
+  existingIds: Set<string>;
+  onImport: (p: Product) => void;
+  onClose: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState<{ products: Product[]; total: number; pages: number; cached: boolean } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [added, setAdded] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const t = setTimeout(() => { setDebouncedQ(q); setPage(1); }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/eurocomp?q=${encodeURIComponent(debouncedQ)}&page=${page}`)
+      .then((r) => r.json())
+      .then(setData)
+      .finally(() => setLoading(false));
+  }, [debouncedQ, page]);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/sync", { method: "POST" });
+      const json = await res.json();
+      if (json.ok) {
+        // Reload data after sync
+        const r = await fetch(`/api/eurocomp?q=${encodeURIComponent(debouncedQ)}&page=1`);
+        setData(await r.json());
+        setPage(1);
+      } else {
+        alert(json.error ?? "Error al sincronizar");
+      }
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleAdd = (p: Product) => {
+    onImport(p);
+    setAdded((prev) => new Set(prev).add(p.id));
+  };
+
+  const inputClass = "w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-3 text-sm text-white transition-all focus:outline-none focus:border-accent/60 placeholder:text-white/20";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-2xl flex flex-col"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-black/40 shrink-0">
+        <div>
+          <h2 className="text-xl font-bold text-white">Importar desde Eurocomp</h2>
+          {data && data.cached && (
+            <p className="text-xs text-white/40 mt-0.5">{data.total.toLocaleString()} productos disponibles</p>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="text-xs font-bold tracking-widest uppercase px-5 py-2.5 rounded-xl border border-accent/30 text-accent hover:bg-accent/10 transition-all disabled:opacity-40 flex items-center gap-2"
+          >
+            {syncing ? (
+              <><svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>Sincronizando...</>
+            ) : "↻ Sincronizar ahora"}
+          </button>
+          <button
+            onClick={onClose}
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-white/5 border border-white/10 text-white/50 hover:text-white hover:bg-white/10 transition-all"
+          >✕</button>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="px-6 py-4 border-b border-white/5 shrink-0">
+        <input
+          className={inputClass}
+          placeholder="Buscar por nombre, categoría o código..."
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          autoFocus
+        />
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto px-6 py-4">
+        {!data?.cached ? (
+          <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
+            <div className="w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
+              <svg className="w-7 h-7 text-white/20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-white font-bold mb-1">Catálogo no sincronizado</p>
+              <p className="text-white/40 text-sm mb-4">Sincronizá primero para ver los productos de Eurocomp</p>
+              <button
+                onClick={handleSync}
+                disabled={syncing}
+                className="text-sm font-bold tracking-widest uppercase px-6 py-3 rounded-xl bg-gradient-to-r from-accent to-accent-alt text-white shadow-lg shadow-accent/20 disabled:opacity-50"
+              >
+                {syncing ? "Sincronizando..." : "Sincronizar ahora"}
+              </button>
+            </div>
+          </div>
+        ) : loading ? (
+          <div className="flex items-center justify-center h-40 text-white/30 text-sm">Buscando...</div>
+        ) : data.products.length === 0 ? (
+          <div className="flex items-center justify-center h-40 text-white/30 text-sm">Sin resultados para "{debouncedQ}"</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {data.products.map((p) => {
+              const alreadyIn = existingIds.has(p.id) || added.has(p.id);
+              return (
+                <div key={p.id} className="glass-panel p-4 flex gap-3 items-start rounded-xl border border-white/5 hover:border-white/10 transition-colors">
+                  {p.image ? (
+                    <img src={p.image} alt="" className="w-14 h-14 rounded-lg object-contain bg-white/5 p-1 shrink-0" />
+                  ) : (
+                    <div className="w-14 h-14 rounded-lg bg-white/5 flex items-center justify-center text-white/10 text-xs shrink-0">—</div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-sm font-semibold leading-snug line-clamp-2">{p.name}</p>
+                    <p className="text-white/40 text-[0.65rem] uppercase tracking-widest mt-1">{p.category}</p>
+                    {p.price && <p className="text-accent text-sm font-bold mt-1">{p.price}</p>}
+                  </div>
+                  <button
+                    onClick={() => handleAdd(p)}
+                    disabled={alreadyIn}
+                    className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition-all ${
+                      alreadyIn
+                        ? "bg-green-500/20 text-green-400 border border-green-500/30 cursor-default"
+                        : "bg-accent/10 text-accent border border-accent/30 hover:bg-accent hover:text-white"
+                    }`}
+                    title={alreadyIn ? "Ya agregado" : "Agregar al catálogo"}
+                  >
+                    {alreadyIn ? "✓" : "+"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Pagination */}
+      {data?.cached && data.pages > 1 && (
+        <div className="flex items-center justify-between px-6 py-4 border-t border-white/5 shrink-0">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            className="text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-lg border border-white/10 text-white/50 hover:text-white hover:bg-white/5 disabled:opacity-20 transition-all"
+          >← Anterior</button>
+          <span className="text-xs text-white/30 font-medium">
+            Página {page} de {data.pages}
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(data.pages, p + 1))}
+            disabled={page >= data.pages}
+            className="text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-lg border border-white/10 text-white/50 hover:text-white hover:bg-white/5 disabled:opacity-20 transition-all"
+          >Siguiente →</button>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
 export default function AdminPanel() {
   const [products, setProducts] = useState<Product[]>([]);
   const [editing, setEditing] = useState<Product | null | "new">(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [originUrl, setOriginUrl] = useState("");
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     fetch("/api/catalog")
@@ -400,8 +581,8 @@ export default function AdminPanel() {
               Control total sobre tu catálogo electrónico
             </p>
           </div>
-          <div className="flex items-center gap-4">
-            <Link 
+          <div className="flex items-center gap-3">
+            <Link
               href="/"
               className="glass-button text-xs font-bold tracking-[0.15em] uppercase px-6 py-3.5 rounded-xl border border-white/10 text-white flex items-center gap-2 hover:bg-white/5"
             >
@@ -411,6 +592,15 @@ export default function AdminPanel() {
               </svg>
               Vista Previa
             </Link>
+            <button
+              onClick={() => setImporting(true)}
+              className="text-xs font-bold tracking-[0.15em] uppercase px-6 py-3.5 rounded-xl border border-accent/40 text-accent hover:bg-accent/10 transition-all duration-300 flex items-center gap-2"
+            >
+              <svg fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+              Importar Eurocomp
+            </button>
             <button
               onClick={() => setEditing("new")}
               className="text-xs font-bold tracking-[0.15em] uppercase px-8 py-3.5 rounded-xl bg-gradient-to-r from-accent to-accent-alt text-white shadow-lg shadow-accent/20 hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] transition-all duration-300"
@@ -567,6 +757,28 @@ export default function AdminPanel() {
             onSave={handleSave}
             onClose={() => setEditing(null)}
             existingCategories={Array.from(new Set(products.map(p => p.category).filter(Boolean)))}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Eurocomp Importer */}
+      <AnimatePresence>
+        {importing && (
+          <EurocompImporter
+            existingIds={new Set(products.map((p) => p.id))}
+            onImport={(p) => {
+              const exists = products.findIndex((x) => x.id === p.id) >= 0;
+              if (!exists) {
+                const updated = [...products, p];
+                setProducts(updated);
+                fetch("/api/catalog", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(updated),
+                });
+              }
+            }}
+            onClose={() => setImporting(false)}
           />
         )}
       </AnimatePresence>
