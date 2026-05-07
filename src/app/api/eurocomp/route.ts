@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
 
     return Response.json({ products, total, pages, categories, exchangeRate, syncedAt, cached: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return Response.json({ error: message }, { status: 500 });
+    console.error("[eurocomp]", err instanceof Error ? err.message : err);
+    return Response.json({ products: [], total: 0, pages: 0, categories: [], cached: false });
   }
 }

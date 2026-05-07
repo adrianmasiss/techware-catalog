@@ -64,9 +64,18 @@ export default function EurocompManager() {
 
     fetch(`/api/eurocomp?${params}`)
       .then((r) => r.json())
-      .then((d: ApiResponse) => {
-        setData(d);
-        if (d.exchangeRate) setRate(d.exchangeRate);
+      .then((d: Partial<ApiResponse>) => {
+        const safe: ApiResponse = {
+          products:     Array.isArray(d.products) ? d.products : [],
+          total:        d.total    ?? 0,
+          pages:        d.pages    ?? 0,
+          categories:   Array.isArray(d.categories) ? d.categories : [],
+          exchangeRate: d.exchangeRate ?? 520,
+          syncedAt:     d.syncedAt ?? null,
+          cached:       d.cached   ?? false,
+        };
+        setData(safe);
+        if (safe.exchangeRate) setRate(safe.exchangeRate);
       })
       .finally(() => setLoading(false));
   }, [page, debouncedQ, category, status]);
