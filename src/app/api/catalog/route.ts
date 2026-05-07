@@ -12,7 +12,9 @@ export async function GET() {
     ]);
 
     if (blobUrl && Array.isArray(visibleIds) && visibleIds.length > 0) {
-      const res = await fetch(blobUrl, { next: { revalidate: 3600 } });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(blobUrl, { next: { revalidate: 3600 }, signal: controller.signal }).finally(() => clearTimeout(timer));
       const all: Product[] = await res.json();
       const visibleSet    = new Set(visibleIds);
       const exchangeRate  = rate ?? DEFAULT_RATE;
