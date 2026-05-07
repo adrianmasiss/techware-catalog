@@ -3,6 +3,8 @@ import { put } from "@vercel/blob";
 import { fetchItems } from "@/lib/soap-client";
 import type { NextRequest } from "next/server";
 
+export const maxDuration = 60; // capped at 10s on Hobby, 60s on Pro
+
 async function runSync() {
   const cid    = process.env.SOAP_CID;
   const passwd = process.env.SOAP_PASSWD;
@@ -12,7 +14,9 @@ async function runSync() {
   }
 
   try {
+    const t0       = Date.now();
     const products = await fetchItems();
+    const soapMs   = Date.now() - t0;
 
     if (products.length === 0) {
       return Response.json({ error: "La API devolvió 0 productos. Puede ser rate limit — intentá más tarde." }, { status: 502 });
@@ -36,7 +40,7 @@ async function runSync() {
       kv.set("synced_at",         now),
     ]);
 
-    return Response.json({ ok: true, synced: products.length, new: newIds.length, synced_at: now });
+    return Response.json({ ok: true, synced: products.length, new: newIds.length, synced_at: now, soap_ms: soapMs });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[sync] error:", message);

@@ -44,16 +44,27 @@ function buildEnvelope(method: string, params: Record<string, string>): string {
 </soapenv:Envelope>`;
 }
 
-async function callSoap(method: string, params: Record<string, string>): Promise<string> {
-  const envelope = buildEnvelope(method, params);
-  const res = await fetch(ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "text/xml;charset=UTF-8", SOAPAction: '""' },
-    body: envelope,
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
-  return text;
+async function callSoap(method: string, params: Record<string, string>, timeoutMs = 25000): Promise<string> {
+  const envelope   = buildEnvelope(method, params);
+  const controller = new AbortController();
+  const timer      = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "text/xml;charset=UTF-8", SOAPAction: '""' },
+      body: envelope,
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+    return text;
+  } catch (err) {
+    if ((err as Error).name === "AbortError") throw new Error(`SOAP timeout después de ${timeoutMs / 1000}s`);
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ── XML parser ───────────────────────────────────────────────────────────────
