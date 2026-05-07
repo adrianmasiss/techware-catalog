@@ -8,35 +8,40 @@ async function runSync() {
   const passwd = process.env.SOAP_PASSWD;
 
   if (!cid || !passwd) {
-    return Response.json({ error: "SOAP not configured" }, { status: 500 });
+    return Response.json({ error: "SOAP no configurado" }, { status: 500 });
   }
 
-  const products = await fetchItems();
-  if (products.length === 0) {
-    return Response.json({ error: "SOAP returned 0 products" }, { status: 502 });
+  try {
+    const products = await fetchItems();
+
+    if (products.length === 0) {
+      return Response.json({ error: "La API devolvió 0 productos. Puede ser rate limit — intentá más tarde." }, { status: 502 });
+    }
+
+    const blob = await put("eurocomp-catalog.json", JSON.stringify(products), {
+      access: "public",
+      contentType: "application/json",
+      addRandomSuffix: false,
+    });
+
+    const prevIds = await kv.get<string[]>("eurocomp_all_ids") ?? [];
+    const prevSet = new Set(prevIds);
+    const newIds  = products.filter((p) => !prevSet.has(p.id)).map((p) => p.id);
+    const now     = new Date().toISOString();
+
+    await Promise.all([
+      kv.set("eurocomp_blob_url", blob.url),
+      kv.set("eurocomp_all_ids",  products.map((p) => p.id)),
+      kv.set("eurocomp_new_ids",  newIds),
+      kv.set("synced_at",         now),
+    ]);
+
+    return Response.json({ ok: true, synced: products.length, new: newIds.length, synced_at: now });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[sync] error:", message);
+    return Response.json({ error: message }, { status: 500 });
   }
-
-  // Upload full catalog to Vercel Blob (overwrites previous)
-  const blob = await put("eurocomp-catalog.json", JSON.stringify(products), {
-    access: "public",
-    contentType: "application/json",
-    addRandomSuffix: false,
-  });
-
-  // Detect new products vs previous sync
-  const prevIds = await kv.get<string[]>("eurocomp_all_ids") ?? [];
-  const prevSet = new Set(prevIds);
-  const newIds  = products.filter((p) => !prevSet.has(p.id)).map((p) => p.id);
-
-  const now = new Date().toISOString();
-  await Promise.all([
-    kv.set("eurocomp_blob_url", blob.url),
-    kv.set("eurocomp_all_ids",  products.map((p) => p.id)),
-    kv.set("eurocomp_new_ids",  newIds),
-    kv.set("synced_at",         now),
-  ]);
-
-  return Response.json({ ok: true, synced: products.length, new: newIds.length, synced_at: now });
 }
 
 export async function GET(request: NextRequest) {

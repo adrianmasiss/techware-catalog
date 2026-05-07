@@ -86,9 +86,18 @@ export default function EurocompManager() {
     setSyncing(true);
     try {
       const res  = await fetch("/api/sync", { method: "POST" });
-      const json = await res.json();
-      if (json.ok) fetchData();
-      else alert(json.error ?? "Error al sincronizar");
+      const text = await res.text();
+      let json: { ok?: boolean; error?: string; synced?: number } = {};
+      try { json = JSON.parse(text); } catch { /* empty response = timeout */ }
+
+      if (json.ok) {
+        fetchData();
+      } else {
+        const msg = json.error ?? (res.status === 504 ? "Timeout — la sincronización tardó demasiado. Intentá de nuevo." : `Error ${res.status}`);
+        alert(msg);
+      }
+    } catch {
+      alert("Error de red al sincronizar.");
     } finally {
       setSyncing(false);
     }
